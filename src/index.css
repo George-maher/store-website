@@ -1,0 +1,20 @@
+:root{
+  --brand:#2563eb;
+  --brand-dark:#1e40af;
+  --bg:#f9fafb;
+  --card:#ffffff;
+  --muted:#6b7280;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* extra project styles (kept small) */
+.brand-logo{font-weight:800;font-size:1.25rem}
+.muted{color:#6b7280}
+.center{display:flex;align-items:center;justify-content:center}
+
+/* custom scrollbar */
+::-webkit-scrollbar{width:10px}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
