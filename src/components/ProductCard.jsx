@@ -1,10 +1,10 @@
-import { MessageCircle } from 'lucide-react';
+import { ShoppingCart } from 'lucide-react';
+import { useCart } from './CartContext';
+import { useTranslation } from '../utils/translations';
 
 export default function ProductCard({ product, lang }) {
-  const phone = product.phone || '123456789';
-  const whatsappLink = `https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(
-    `Hi, I want to order: ${product.name} - ${product.price}`
-  )}`;
+  const { addToCart } = useCart();
+  const t = useTranslation(lang);
 
   const imgSrc = product.image
     ? product.image.startsWith('http')
@@ -23,10 +23,16 @@ export default function ProductCard({ product, lang }) {
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{product.name}</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{product.description}</p>
         <div className="mt-2 flex items-center justify-between">
-          <span className="text-xl font-black text-brand">${product.price}</span>
-          <a href={whatsappLink} target="_blank" rel="noreferrer" className="bg-brand text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:scale-105 transition">
-            <MessageCircle size={16} /> <span className="text-sm">{lang === 'en' ? 'Order' : 'اطلب'}</span>
-          </a>
+          <span className="text-xl font-black text-brand">{product.price} EGP</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => addToCart(product)}
+              className="bg-green-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 transition"
+            >
+              <ShoppingCart size={16} />
+              <span className="text-sm">{t.addToCart}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
