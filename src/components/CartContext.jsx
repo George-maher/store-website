@@ -15,14 +15,23 @@ export function CartProvider({ children }) {
   useEffect(() => {
     try {
       localStorage.setItem('cart:v1', JSON.stringify(cart));
-    } catch {}
+    } catch {
+      // Silent fail for localStorage errors
+    }
   }, [cart]);
 
   function addToCart(product) {
     setCart((prev) => {
       const idx = prev.findIndex((p) => p.id === product.id);
       if (idx === -1) {
-        return [...prev, { id: product.id, name: product.name, price: Number(product.price), quantity: 1 }];
+        return [...prev, { 
+          id: product.id, 
+          name: product.name, 
+          price: Number(product.price), 
+          quantity: 1,
+          image: product.images ? product.images[0] : product.image,
+          category: product.category
+        }];
       }
       const next = [...prev];
       next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
@@ -51,10 +60,11 @@ export function CartProvider({ children }) {
   );
 }
 
-export function useCart() {
+function useCart() {
   const ctx = useContext(CartContext);
   if (!ctx) throw new Error('useCart must be used within CartProvider');
   return ctx;
 }
 
+export { useCart };
 export default CartContext;

@@ -19,7 +19,7 @@ export default function Login({ lang = 'en' }) {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const user = cred.user;
-      const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || "";
+      const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || "tony@degoy.com";
       if (user?.email === ADMIN_EMAIL) {
         navigate("/br49_Tony_Degoy45");
       } else {
@@ -33,34 +33,50 @@ export default function Login({ lang = 'en' }) {
   };
 
   return (
-    <div className={`container center ${!isEn ? 'rtl' : ''}`} style={{ minHeight: "70vh" }}>
-      <form onSubmit={handleLogin} className="form-card" style={{ maxWidth: 480, width: "100%" }}>
-        <h2 className="heading" style={{ marginBottom: 12 }}>
+    <div className={`min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 ${!isEn ? 'rtl' : ''}`}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 w-full max-w-md">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
           {t.adminLogin}
         </h2>
         {error && (
-          <p className="muted" style={{ color: "crimson", marginBottom: 12 }}>
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg mb-4">
             {error}
-          </p>
+          </div>
         )}
-        <input 
-          type="email" 
-          placeholder={t.email} 
-          className={`input ${!isEn ? 'text-right' : ''}`} 
-          value={email} 
-          onChange={(e) => setEmail(e.target.value)} 
-        />
-        <input 
-          type="password" 
-          placeholder={t.password} 
-          className={`input ${!isEn ? 'text-right' : ''}`} 
-          value={password} 
-          onChange={(e) => setPassword(e.target.value)} 
-        />
-        <button type="submit" className="btn-primary" style={{ width: "100%" }}>
-          {t.login}
-        </button>
-      </form>
+        <form onSubmit={handleLogin}>
+          <div className="mb-4">
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">
+              {t.email}
+            </label>
+            <input 
+              type="email" 
+              name="email"
+              placeholder={t.email} 
+              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${!isEn ? 'text-right' : ''}`} 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              required
+            />
+          </div>
+          <div className="mb-6">
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">
+              {t.password}
+            </label>
+            <input 
+              type="password" 
+              name="password"
+              placeholder={t.password} 
+              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${!isEn ? 'text-right' : ''}`} 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              required
+            />
+          </div>
+          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            {t.login}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

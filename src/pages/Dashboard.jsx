@@ -3,43 +3,68 @@ import { db } from '../firebase';
 import { onSnapshot, collection, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import ProductCard from '../components/ProductCard';
 import AddProductForm from '../components/AddProductForm';
+import OffersManager from '../components/OffersManager';
 import { useTranslation } from '../utils/translations';
+import { getAuth } from 'firebase/auth';
 
-// Admin dashboard: add products and view existing ones
+// Admin dashboard: add products and manage them
 export default function Dashboard({ lang = 'en' }) {
   const isEn = lang === 'en';
   const t = useTranslation(lang);
   const [products, setProducts] = useState([]);
+  const [offers, setOffers] = useState([]);
+  const [activeTab, setActiveTab] = useState('add'); // 'add', 'manage', or 'offers'
   const [viewMode, setViewMode] = useState('all'); // 'all' or 'recent'
-  const [hiddenSampleIds, setHiddenSampleIds] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
-  const [editForm, setEditForm] = useState({ name: '', price: '', description: '', category: '' });
+  const [editForm, setEditForm] = useState({ name: '', price: '', description: '', category: '', images: [] });
   const [editLoading, setEditLoading] = useState(false);
 
-  const sampleProducts = [
-    { id: 's1', name: 'Cloud Runner Sneakers', description: 'Lightweight, breathable street sneakers.', price: '89', image: '/images/WhatsApp Image 2026-02-21 at 12.32.04 AM.jpeg', category: 'Shoes', createdAt: new Date('2026-02-21'), isSample: true },
-    { id: 's2', name: 'Ocean Hoodie', description: 'Soft fleece hoodie with embroidered logo.', price: '59', image: '/images/WhatsApp Image 2026-02-21 at 12.32.02 AM (3).jpeg', category: 'Apparel', createdAt: new Date('2026-02-21'), isSample: true },
-    { id: 's3', name: 'Neon Cap', description: 'Adjustable cap with neon piping.', price: '19', image: '/images/WhatsApp Image 2026-02-21 at 12.32.01 AM (2).jpeg', category: 'Accessories', createdAt: new Date('2026-02-21'), isSample: true },
-  ];
-
   useEffect(() => {
+    // Check admin authentication
+    const auth = getAuth();
+    const user = auth.currentUser;
+    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || 'admin@degoy.com';
+    
+    if (user && user.email === adminEmail) {
+      // User is authenticated as admin
+    }
+    
     // realtime subscription to products so admin always sees all changes
-    const unsub = onSnapshot(collection(db, 'products'), (snapshot) => {
+    const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
       setProducts(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
-    }, (err) => {
-      console.error('Failed to subscribe to products', err);
+    }, () => {
+      // Error handled silently
     });
 
-    return () => unsub();
+    // realtime subscription to offers so admin can manage them
+    const unsubOffers = onSnapshot(collection(db, 'offers'), (snapshot) => {
+      setOffers(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+    }, () => {
+      // Error handled silently
+    });
+
+    return () => {
+      unsubProducts();
+      unsubOffers();
+    };
   }, []);
+
+  const handleDeleteOffer = async (id) => {
+    if (!confirm(isEn ? 'Delete this offer?' : 'حذف هذا العرض؟')) return;
+    try {
+      await deleteDoc(doc(db, 'offers', id));
+      setOffers(prev => prev.filter(o => o.id !== id));
+    } catch {
+      alert(isEn ? 'Failed to delete offer' : 'فشل في حذف العرض');
+    }
+  };
 
   const handleDelete = async (id) => {
     if (!confirm(isEn ? 'Delete this product?' : 'حذف هذا المنتج؟')) return;
     try {
       await deleteDoc(doc(db, 'products', id));
       setProducts(prev => prev.filter(p => p.id !== id));
-    } catch (err) {
-      console.error(err);
+    } catch {
       alert(isEn ? 'Failed to delete' : 'فشل في الحذف');
     }
   };
@@ -71,8 +96,7 @@ export default function Dashboard({ lang = 'en' }) {
       setEditingProduct(null);
       setEditForm({ name: '', price: '', description: '', category: '' });
       alert(isEn ? 'Product updated successfully ' : 'تم تحديث المنتج بنجاح ');
-    } catch (err) {
-      console.error('Error updating product:', err);
+    } catch {
       alert(isEn ? 'Failed to update product' : 'فشل في تحديث المنتج');
     } finally {
       setEditLoading(false);
@@ -82,6 +106,47 @@ export default function Dashboard({ lang = 'en' }) {
   const handleCancelEdit = () => {
     setEditingProduct(null);
     setEditForm({ name: '', price: '', description: '', category: '' });
+  };
+
+  const getDisplayProducts = () => {
+    const base = products || [];
+    if (viewMode === 'recent') {
+      // sort by createdAt desc and take top 10
+      const toMillis = (t) => {
+        if (!t) return 0;
+        if (typeof t === 'number') return t;
+        if (typeof t.toMillis === 'function') return t.toMillis();
+        if (t.seconds) return t.seconds * 1000;
+        return 0;
+      };
+      return base
+        .slice()
+        .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt))
+        .slice(0, 10);
+    }
+    return base;
+  };
+
+  const getProductImage = (p) => {
+    // Handle both single image and multiple images
+    if (p.images && p.images.length > 0) {
+      return p.images[0]; // Use first image as thumbnail
+    } else if (p.image) {
+      return p.image.startsWith('http')
+        ? p.image
+        : p.image.startsWith('/images/')
+          ? p.image
+          : `/images/${p.image}`;
+    }
+    return '/images/placeholder.jpg';
+  };
+
+  const getCreatedAt = (p) => {
+    return p.createdAt && p.createdAt.seconds 
+      ? new Date(p.createdAt.seconds * 1000) 
+      : p.createdAt 
+        ? new Date(p.createdAt) 
+        : null;
   };
 
   return (
@@ -97,168 +162,220 @@ export default function Dashboard({ lang = 'en' }) {
                 </h1>
                 <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">{t.manageProducts}</p>
               </div>
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-6">
                 <div className="text-center">
                   <div className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">{products.length}</div>
                   <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{t.totalProducts}</div>
                 </div>
               </div>
             </div>
+
+            {/* Navigation Tabs */}
+            <div className="mt-6 border-b border-gray-200 dark:border-gray-700">
+              <nav className="-mb-px flex space-x-8">
+                <button
+                  onClick={() => setActiveTab('add')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                    activeTab === 'add'
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    {t.addNewProduct}
+                  </div>
+                </button>
+                <button
+                  onClick={() => setActiveTab('manage')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                    activeTab === 'manage'
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    {t.manageProducts}
+                  </div>
+                </button>
+                <button
+                  onClick={() => setActiveTab('offers')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                    activeTab === 'offers'
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {t.manageOffers || (isEn ? 'Manage Offers' : 'إدارة العروض')}
+                  </div>
+                </button>
+              </nav>
+            </div>
           </div>
         </div>
 
-        {/* Add Product Section */}
-        <section className="mb-6 sm:mb-8">
-          <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-2xl sm:rounded-3xl shadow-xl border border-white/20 dark:border-gray-700 p-4 sm:p-6 lg:p-8">
-            <div className="flex items-center mb-4 sm:mb-6">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center mr-3 sm:mr-4">
-                <svg className="w-4 h-4 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
+        {/* Dynamic Content Based on Active Tab */}
+        {activeTab === 'add' ? (
+          <div>
+            {/* Add Product Section */}
+            <section className="mb-6 sm:mb-8">
+              <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-2xl sm:rounded-3xl shadow-xl border border-white/20 dark:border-gray-700 p-4 sm:p-6 lg:p-8">
+                <div className="flex items-center mb-4 sm:mb-6">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center mr-3 sm:mr-4">
+                    <svg className="w-4 h-4 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">{t.addNewProduct}</h2>
+                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">{t.uploadInventory}</p>
+                  </div>
+                </div>
+                <AddProductForm lang={lang} />
               </div>
-              <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">{t.addNewProduct}</h2>
-                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">{t.uploadInventory}</p>
-              </div>
-            </div>
-            <AddProductForm lang={lang} />
+            </section>
           </div>
-        </section>
-
-        {/* Products Section */}
-        <section>
-          <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-2xl sm:rounded-3xl shadow-xl border border-white/20 dark:border-gray-700 p-4 sm:p-6 lg:p-8">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-              <div className="flex items-center">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center mr-3 sm:mr-4">
-                  <svg className="w-4 h-4 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                  </svg>
+        ) : activeTab === 'manage' ? (
+          <div>
+            {/* Manage Products Section */}
+            <section className="mb-6 sm:mb-8">
+              <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-2xl sm:rounded-3xl shadow-xl border border-white/20 dark:border-gray-700 p-4 sm:p-6 lg:p-8">
+                <div className="flex items-center mb-4 sm:mb-6">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-xl flex items-center justify-center mr-3 sm:mr-4">
+                    <svg className="w-4 h-4 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">{t.productInventory}</h2>
+                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">{t.viewCatalog}</p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">{t.productInventory}</h2>
-                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">{t.viewCatalog}</p>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <button
+                    onClick={() => setViewMode('all')}
+                    className={`px-3 py-2 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 ${viewMode === 'all' ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                  >
+                    {t.allProducts}
+                  </button>
+                  <button
+                    onClick={() => setViewMode('recent')}
+                    className={`px-3 py-2 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 ${viewMode === 'recent' ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                  >
+                    {t.recentProducts}
+                  </button>
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <button
-                  onClick={() => setViewMode('all')}
-                  className={`px-3 py-2 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 ${viewMode === 'all' ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
-                >
-                  {t.allProducts}
-                </button>
-                <button
-                  onClick={() => setViewMode('recent')}
-                  className={`px-3 py-2 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 ${viewMode === 'recent' ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
-                >
-                  {t.recentProducts}
-                </button>
-              </div>
-            </div>
 
-            <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px]">
-                  <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700">
-                    <tr>
-                      <th className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.image}</th>
-                      <th className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.productName}</th>
-                      <th className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.price}</th>
-                      <th className="hidden sm:table-cell px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.category}</th>
-                      <th className="hidden lg:table-cell px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.created}</th>
-                      <th className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.actions}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
-                    {(() => {
-                      const base = (products && products.length ? products : sampleProducts.filter(s => !hiddenSampleIds.includes(s.id)));
-                      if (viewMode === 'recent') {
-                        // sort by createdAt desc and take top 10
-                        const toMillis = (t) => {
-                          if (!t) return 0;
-                          if (typeof t === 'number') return t;
-                          if (typeof t.toMillis === 'function') return t.toMillis();
-                          if (t.seconds) return t.seconds * 1000;
-                          return 0;
-                        };
-                        return base
-                          .slice()
-                          .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt))
-                          .slice(0, 10)
-                          .map((p) => p);
-                      }
-                      return base;
-                    })().map((p) => {
-                      const imgSrc = p.image
-                        ? p.image.startsWith('http')
-                          ? p.image
-                          : p.image.startsWith('/images/')
-                          ? p.image
-                          : `/images/${p.image}`
-                        : '/images/placeholder.jpg';
+              {/* Products Table */}
+              <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[600px]">
+                    <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700">
+                      <tr>
+                        <th className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.image}</th>
+                        <th className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.productName}</th>
+                        <th className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.price}</th>
+                        <th className="hidden sm:table-cell px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.category}</th>
+                        <th className="hidden lg:table-cell px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.created}</th>
+                        <th className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{t.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                      {getDisplayProducts().map((p) => {
+                        const imgSrc = getProductImage(p);
+                        const createdAt = getCreatedAt(p);
 
-                      const createdAt = p.createdAt && p.createdAt.seconds ? new Date(p.createdAt.seconds * 1000) : p.createdAt ? new Date(p.createdAt) : null;
-
-                      return (
-                        <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-                          <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="flex-shrink-0 h-12 w-12 sm:h-14 sm:w-14 lg:h-16 lg:w-16">
-                                <img className="h-12 w-12 sm:h-14 sm:w-14 lg:h-16 lg:w-16 rounded-xl object-cover border border-gray-200 dark:border-gray-600" src={imgSrc} alt={p.name} />
+                        return (
+                          <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+                            <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 h-12 w-12 sm:h-14 sm:w-14 lg:h-16 lg:w-16">
+                                  <img className="h-12 w-12 sm:h-14 sm:w-14 lg:h-16 lg:w-16 rounded-xl object-cover border border-gray-200 dark:border-gray-600" src={imgSrc} alt={p.name} />
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
-                            <div className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[120px] sm:max-w-none">{p.name}</div>
-                            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate max-w-[120px] sm:max-w-xs lg:max-w-sm">{p.description}</div>
-                            <div className="sm:hidden mt-1">
-                              <span className="px-2 py-1 inline-flex text-xs leading-4 font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                            </td>
+                            <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
+                              <div className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[120px] sm:max-w-none">{p.name}</div>
+                              <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate max-w-[120px] sm:max-w-xs lg:max-w-sm">{p.description}</div>
+                              <div className="sm:hidden mt-1">
+                                <span className="px-2 py-1 inline-flex text-xs leading-4 font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                  {p.category || 'Uncategorized'}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-gray-900 dark:text-white"> {p.price} EGP</div>
+                            </td>
+                            <td className="hidden sm:table-cell px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
+                              <span className="px-2 sm:px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                                 {p.category || 'Uncategorized'}
                               </span>
-                            </div>
-                          </td>
-                          <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
-                            <div className="text-sm font-semibold text-gray-900 dark:text-white"> {p.price} EGP</div>
-                          </td>
-                          <td className="hidden sm:table-cell px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
-                            <span className="px-2 sm:px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                              {p.category || 'Uncategorized'}
-                            </span>
-                          </td>
-                          <td className="hidden lg:table-cell px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                            {createdAt ? createdAt.toLocaleDateString() : '-'}
-                          </td>
-                          <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleEdit(p)}
-                                className="inline-flex items-center px-2 py-1.5 sm:px-3 sm:py-2 border border-transparent text-xs sm:text-sm leading-4 font-medium rounded-xl text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800"
-                              >
-                                <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                                <span className="hidden sm:inline">{isEn ? 'Edit' : 'تعديل'}</span>
-                              </button>
-                              <button
-                                onClick={() => p.isSample ? setHiddenSampleIds(prev => [...prev, p.id]) : handleDelete(p.id)}
-                                className="inline-flex items-center px-2 py-1.5 sm:px-3 sm:py-2 border border-transparent text-xs sm:text-sm leading-4 font-medium rounded-xl text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800"
-                              >
-                                <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                                <span className="hidden sm:inline">{t.delete}</span>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            </td>
+                            <td className="hidden lg:table-cell px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                              {createdAt ? createdAt.toLocaleDateString() : '-'}
+                            </td>
+                            <td className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleEdit(p)}
+                                  className="inline-flex items-center px-2 py-1.5 sm:px-3 sm:py-2 border border-transparent text-xs sm:text-sm leading-4 font-medium rounded-xl text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800"
+                                >
+                                  <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                  <span className="hidden sm:inline">{isEn ? 'Edit' : 'تعديل'}</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(p.id)}
+                                  className="inline-flex items-center px-2 py-1.5 sm:px-3 sm:py-2 border border-transparent text-xs sm:text-sm leading-4 font-medium rounded-xl text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800"
+                                >
+                                  <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                  <span className="hidden sm:inline">{t.delete}</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            </section>
           </div>
-        </section>
+        ) : (
+          <div>
+            {/* Manage Offers Section */}
+            <section className="mb-6 sm:mb-8">
+              <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-2xl sm:rounded-3xl shadow-xl border border-white/20 dark:border-gray-700 p-4 sm:p-6 lg:p-8">
+                <div className="flex items-center mb-4 sm:mb-6">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl flex items-center justify-center mr-3 sm:mr-4">
+                    <svg className="w-4 h-4 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">{t.manageOffers || (isEn ? 'Manage Offers' : 'إدارة العروض')}</h2>
+                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">{isEn ? 'Add, edit, and delete promotional offers' : 'إضافة وتعديل وحذف العروض الترويجية'}</p>
+                  </div>
+                </div>
+                <OffersManager lang={lang} offers={offers} onDelete={handleDeleteOffer} />
+              </div>
+            </section>
+          </div>
+        )}
 
         {/* Edit Product Modal */}
         {editingProduct && (
