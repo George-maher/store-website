@@ -19,9 +19,9 @@ export default function Login({ lang = 'en' }) {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const user = cred.user;
-      const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || "tony@degoy.com";
+      const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || "YOUREMAIL";
       if (user?.email === ADMIN_EMAIL) {
-        navigate("/br49_Tony_Degoy45");
+        navigate("/SECRET PATH");
       } else {
         await signOut(auth);
         setError(isEn ? "Access denied: not an admin" : "تم رفض الوصول: لست مشرفاً");
