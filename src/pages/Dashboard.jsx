@@ -23,7 +23,7 @@ export default function Dashboard({ lang = 'en' }) {
     // Check admin authentication
     const auth = getAuth();
     const user = auth.currentUser;
-    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || 'admin@degoy.com';
+    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || 'admin@GMAIL.com';
     
     if (user && user.email === adminEmail) {
       // User is authenticated as admin
