@@ -72,7 +72,7 @@ export default function App() {
                     loading ? (
                       <div className="p-10">Loading...</div>
                     ) : user && user.email === adminEmail ? (
-                      <Navigate to="/br49_Tony_Degoy45" />
+                      <Navigate to="/SECRET PATH" />
                     ) : (
                       <Login lang={lang} />
                     )
