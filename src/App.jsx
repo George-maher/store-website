@@ -34,8 +34,8 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || import.meta.env.REACT_APP_ADMIN_EMAIL || 'tony@degoy.com';
-  const SECRET = '/super-secret-login-8392jfks';
+  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || import.meta.env.REACT_APP_ADMIN_EMAIL || 'YOUREMAIL';
+  const SECRET = '/SECRET PATH';
 
   // Sync dark class on <html> and persist setting
   useEffect(() => {
@@ -79,7 +79,7 @@ export default function App() {
                   }
                 />
                 <Route
-                  path="/br49_Tony_Degoy45"
+                  path="/SECRET PATH"
                   element={
                     <AdminRoute secretPath={SECRET} lang={lang}>
                       <Dashboard lang={lang} />
